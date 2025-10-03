@@ -1,73 +1,50 @@
-name: VNC-macOS
+name: macos-vnc
 
 on:
   workflow_dispatch:
 
 jobs:
-  secure-vnc:
+  vnc:
     runs-on: macos-latest
-    timeout-minutes: 360
-
     steps:
-      - name: Set Password for runner user
-        shell: bash
-        run: |
-          # Tạo mật khẩu random
-          PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*()_+=' < /dev/urandom | head -c 16)
-          
-          sudo dscl . -passwd /Users/runner "$PASS"
-          
-          echo "VNC_PASS=$PASS" >> $GITHUB_ENV
-
-      - name: Enable VNC (Screen Sharing)
-        shell: bash
-        run: |
-          # Bật Remote Management (Apple Remote Desktop)
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -activate -configure -access -on \
-            -users runner -privs -all -restart -agent
-
-          # Tạo password hash cho VNC
-          PASS=$VNC_PASS
-          ENCODED=$(python3 -c "import hashlib,sys; p=sys.argv[1].encode(); h=hashlib.md5(p).digest(); print(h[:8].hex())" "$PASS")
-
-          echo $ENCODED | xxd -r -p | \
-            sudo defaults write /Library/Preferences/com.apple.VNCSettings VNCPassword -data -
-
-          # Mở firewall cho VNC (port 5900)
-          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /System/Library/CoreServices/RemoteManagement/ARDAgent.app
-          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /System/Library/CoreServices/RemoteManagement/ARDAgent.app
-
       - name: Install Tailscale
-        shell: bash
         run: |
-          curl -fsSL https://tailscale.com/install.sh | sh
-          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH }} --hostname=gh-macos-${GITHUB_RUN_ID}
+          brew install tailscale
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTHKEY }} \
+            --hostname=gh-macos-runner \
+            --accept-routes --accept-dns=false
 
-      - name: Verify VNC Accessibility
-        shell: bash
+      - name: Setup VNC password
+        id: vncpass
         run: |
-          TS_IP=$(tailscale ip -4 | head -n1)
-          echo "TAILSCALE_IP=$TS_IP" >> $GITHUB_ENV
-          echo "Tailscale IP: $TS_IP"
-          echo "Testing TCP port 5900..."
-          nc -zv $TS_IP 5900 || (echo "Port 5900 not reachable" && exit 1)
+          # Random password 8 ký tự
+          PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 8)
 
-      - name: Show Connection Info
-        shell: bash
-        run: |
-          echo ""
-          echo "=== VNC ACCESS ==="
-          echo "Address: $TAILSCALE_IP:5900"
-          echo "Username: runner"
-          echo "Password: $VNC_PASS"
-          echo "=================="
-          echo ""
+          # Encode password theo chuẩn VNC của macOS
+          ENCPASS=$(echo -n "$PASS" | perl -we 'print pack("H*", unpack("H*", <> ) ^ "1734516E8BA8C5E2FF1C39567390ADCA")' | base64)
 
-      - name: Keep Alive
-        shell: bash
+          sudo defaults write /Library/Preferences/com.apple.VNCSettings Authentication -int 1
+          sudo defaults write /Library/Preferences/com.apple.VNCSettings Password -data "$ENCPASS"
+
+          echo "VNC_PASS=$PASS" >> $GITHUB_ENV
+          echo "$PASS" > vnc-password.txt
+
+      - name: Enable VNC server
         run: |
-          while true; do
-            echo "[$(date)] VNC Active - Use Ctrl+C in workflow to terminate"
-            sleep 300
-          done
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -activate -configure -access -on -restart -agent -privs -all
+
+      - name: Show connection info
+        run: |
+          echo "======================================="
+          echo "Tailscale IP: $(tailscale ip -4)"
+          echo "VNC password saved as artifact."
+          echo "Use: vnc://<tailscale-ip>"
+          echo "======================================="
+
+      - name: Upload VNC password artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vnc-password
+          path: vnc-password.txt
+          retention-days: 1
