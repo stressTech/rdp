@@ -13,16 +13,14 @@ jobs:
         run: |
           # Tạo mật khẩu random
           PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*()_+=' < /dev/urandom | head -c 16)
-          sudo sysadminctl -addUser VNC -password "$PASS"
-          sudo dscl . -append /Groups/admin GroupMembership VNC
+          echo "runner:$PASS" | sudo chpasswd
           echo "VNC_PASS=$PASS" >> $GITHUB_ENV
-
       - name: Enable VNC (Screen Sharing)
         run: |
           # Bật Remote Management (Apple Remote Desktop)
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
             -activate -configure -access -on \
-            -users VNC -privs -all -restart -agent
+            -users runner -privs -all -restart -agent
 
           # Bật VNC với password (MacOS lưu ở com.apple.VNCSettings)
           PASS=$VNC_PASS
