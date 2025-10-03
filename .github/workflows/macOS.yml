@@ -27,13 +27,12 @@ jobs:
         run: |
           # Random password 8 ký tự
           PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 8)
-
-          # Encode password theo chuẩn VNC của macOS
-          ENCPASS=$(echo -n "$PASS" | perl -we 'print pack("H*", unpack("H*", <> ) ^ "1734516E8BA8C5E2FF1C39567390ADCA")' | base64)
-
-          sudo defaults write /Library/Preferences/com.apple.VNCSettings Authentication -int 1
-          sudo defaults write /Library/Preferences/com.apple.VNCSettings Password -data "$ENCPASS"
-
+        
+           # Enable VNC legacy auth (password-only)
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -configure -clientopts -setvnclegacy -vnclegacy yes \
+            -configure -clientopts -setvncpw -vncpw "$PASS"
+        
           echo "VNC_PASS=$PASS" >> $GITHUB_ENV
           echo "$PASS" > vnc-password.txt
 
