@@ -17,7 +17,7 @@ jobs:
       - name: Login Tailscale
         run: |
           sudo /opt/homebrew/bin/tailscale up \
-            --authkey=${{ secrets.TAILSCALE_AUTHKEY }} \
+            --authkey=${{ secrets.TAILSCALE_AUTH }} \
             --hostname=gh-macos-runner \
             --accept-routes --accept-dns=false \
             --ssh=false
