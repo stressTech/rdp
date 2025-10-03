@@ -10,10 +10,18 @@ jobs:
       - name: Install Tailscale
         run: |
           brew install tailscale
-          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTHKEY }} \
+      - name: Start tailscaled
+        run: |
+          sudo /opt/homebrew/opt/tailscale/bin/tailscaled --tun=userspace-networking --socks5-server=localhost:1055 &
+          sleep 5
+      - name: Login Tailscale
+        run: |
+          sudo /opt/homebrew/bin/tailscale up \
+            --authkey=${{ secrets.TAILSCALE_AUTHKEY }} \
             --hostname=gh-macos-runner \
-            --accept-routes --accept-dns=false
-
+            --accept-routes --accept-dns=false \
+            --ssh=false
+            
       - name: Setup VNC password
         id: vncpass
         run: |
