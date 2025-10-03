@@ -1,0 +1,63 @@
+name: VNC
+
+on:
+  workflow_dispatch:
+
+jobs:
+  secure-vnc:
+    runs-on: macos-latest
+    timeout-minutes: 3600
+
+    steps:
+      - name: Create VNC User with Secure Password
+        run: |
+          # Tạo mật khẩu random
+          PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*()_+=' < /dev/urandom | head -c 16)
+          sudo sysadminctl -addUser VNC -password "$PASS"
+          sudo dscl . -append /Groups/admin GroupMembership VNC
+          echo "VNC_PASS=$PASS" >> $GITHUB_ENV
+
+      - name: Enable VNC (Screen Sharing)
+        run: |
+          # Bật Remote Management (Apple Remote Desktop)
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -activate -configure -access -on \
+            -users VNC -privs -all -restart -agent
+
+          # Bật VNC với password (MacOS lưu ở com.apple.VNCSettings)
+          PASS=$VNC_PASS
+          ENCODED=$(python3 -c "import hashlib,sys; p=sys.argv[1].encode(); h=hashlib.md5(p).digest(); print(h[:8].hex())" "$PASS")
+          echo $ENCODED | xxd -r -p | sudo defaults write /Library/Preferences/com.apple.VNCSettings VNCPassword -data -
+          
+          # Mở firewall cho VNC (port 5900)
+          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /System/Library/CoreServices/RemoteManagement/ARDAgent.app
+          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /System/Library/CoreServices/RemoteManagement/ARDAgent.app
+
+      - name: Install Tailscale
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH }} --hostname=gh-macos-${GITHUB_RUN_ID}
+
+      - name: Verify VNC Accessibility
+        run: |
+          TS_IP=$(tailscale ip -4)
+          echo "TAILSCALE_IP=$TS_IP" >> $GITHUB_ENV
+          echo "Tailscale IP: $TS_IP"
+          echo "Testing TCP port 5900..."
+          nc -zv $TS_IP 5900 || (echo "Port 5900 not reachable" && exit 1)
+
+      - name: Maintain Connection
+        run: |
+          echo ""
+          echo "=== VNC ACCESS ==="
+          echo "Address: $TAILSCALE_IP:5900"
+          echo "Username: VNC"
+          echo "Password: $VNC_PASS"
+          echo "=================="
+          echo ""
+          
+          # Giữ cho runner chạy
+          while true; do
+            echo "[$(date)] VNC Active - Use Ctrl+C in workflow to terminate"
+            sleep 300
+          done
