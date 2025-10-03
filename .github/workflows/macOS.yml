@@ -21,25 +21,18 @@ jobs:
             --hostname=gh-macos-runner \
             --accept-routes --accept-dns=false \
             --ssh=false
-            
-      - name: Setup VNC password
-        id: vncpass
+
+      - name: Enable Screen Sharing
         run: |
-          # Random password 8 ký tự
+          sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
+          
+      - name: Setup VNC password
+        run: |
           PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 8)
-        
-           # Enable VNC legacy auth (password-only)
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -configure -clientopts -setvnclegacy -vnclegacy yes \
-            -configure -clientopts -setvncpw -vncpw "$PASS"
-        
+          echo $PASS | perl -we 'print pack("H*", unpack("H*", <>))' | \
+            sudo tee /Library/Preferences/com.apple.VNCSettings.txt > /dev/null
           echo "VNC_PASS=$PASS" >> $GITHUB_ENV
           echo "$PASS" > vnc-password.txt
-
-      - name: Enable VNC server
-        run: |
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -activate -configure -access -on -restart -agent -privs -all
 
       - name: Show connection info
         run: |
