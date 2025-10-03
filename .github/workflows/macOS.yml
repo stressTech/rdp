@@ -29,8 +29,7 @@ jobs:
       - name: Setup VNC password
         run: |
           PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 8)
-          echo $PASS | perl -we 'print pack("H*", unpack("H*", <>))' | \
-            sudo tee /Library/Preferences/com.apple.VNCSettings.txt > /dev/null
+          echo "$PASS" | sudo tee /Library/Preferences/com.apple.VNCSettings.txt > /dev/null
           echo "VNC_PASS=$PASS" >> $GITHUB_ENV
           echo "$PASS" > vnc-password.txt
 
