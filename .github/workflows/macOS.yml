@@ -1,49 +1,24 @@
-name: macos-vnc
-
-on:
+name: MacRDP
+on: 
   workflow_dispatch:
-
 jobs:
-  vnc:
+  build:
+    name: MacRDP
     runs-on: macos-latest
-    steps:
-      - name: Install Tailscale
-        run: |
-          brew install tailscale
-      - name: Start tailscaled
-        run: |
-          sudo /opt/homebrew/opt/tailscale/bin/tailscaled --tun=userspace-networking --socks5-server=localhost:1055 &
-          sleep 5
-      - name: Login Tailscale
-        run: |
-          sudo /opt/homebrew/bin/tailscale up \
-            --authkey=${{ secrets.TAILSCALE_AUTH }} \
-            --hostname=gh-macos-runner \
-            --accept-routes --accept-dns=false \
-            --ssh=false
-
-      - name: Enable Screen Sharing
-        run: |
-          sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
+    
+    steps:                 
+    - name: Enabling Remote Access
+      env:
+        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+      run: |
+          curl -s -o start.sh -L "https://raw.githubusercontent.com/JohnnyNetsec/github-vm/main/mac/start.sh"
+          chmod +x start.sh
+          bash start.sh "$NGROK_AUTH_TOKEN"
           
-      - name: Setup VNC password
-        run: |
-          PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 8)
-          echo "$PASS" | sudo tee /Library/Preferences/com.apple.VNCSettings.txt > /dev/null
-          echo "VNC_PASS=$PASS" >> $GITHUB_ENV
-          echo "$PASS" > vnc-password.txt
-
-      - name: Show connection info
-        run: |
-          echo "======================================="
-          echo "Tailscale IP: $(tailscale ip -4)"
-          echo "VNC password saved as artifact."
-          echo "Use: vnc://<tailscale-ip>"
-          echo "======================================="
-
-      - name: Upload VNC password artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: vnc-password
-          path: vnc-password.txt
-          retention-days: 1
+    - name: Log In Details To VNC Server
+      run: |
+         chmod +x login.sh
+         bash login.sh
+         
+    - name: MacOS System running...
+      uses: mxschmitt/action-tmate@v2
